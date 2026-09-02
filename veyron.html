@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veyron 16.4 — Anatomy of a Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,400&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#07080c;
+    --navy:#0c1730;
+    --navy-2:#152a52;
+    --steel:#aab4c4;
+    --chrome:#e7ebf2;
+    --gold:#cda44c;
+    --ember:#9a4b3a;
+    --line: rgba(231,235,242,0.09);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--ink); color:var(--chrome);
+    font-family:'Inter', sans-serif;
+    overflow-x:hidden;
+  }
+  a{color:inherit;}
+  .serif{font-family:'Fraunces', serif;}
+  .mono{font-family:'Space Mono', monospace;}
+
+  ::selection{background:var(--gold); color:var(--ink);}
+
+  .vignette{position:fixed; inset:0; pointer-events:none; z-index:60; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);}
+  .grain{
+    position:fixed; inset:0; z-index:59; pointer-events:none; opacity:0.05; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* reveal on scroll */
+  .reveal{opacity:0; transform:translateY(28px); transition:opacity .8s ease, transform .8s ease;}
+  .reveal.in{opacity:1; transform:translateY(0);}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:24px 5vw; backdrop-filter:blur(6px);
+    background:linear-gradient(to bottom, rgba(7,8,12,0.7), transparent);
+  }
+  .brand{font-family:'Fraunces', serif; font-style:italic; letter-spacing:0.5px; font-size:1.3rem;}
+  .brand span{color:var(--gold);}
+  .navlinks{display:flex; gap:28px; font-size:0.82rem; letter-spacing:0.3px; align-items:center;}
+  .navlinks a{opacity:0.7; transition:opacity .25s;}
+  .navlinks a:hover{opacity:1;}
+  .sound-toggle{
+    width:36px; height:36px; border-radius:50%; border:1px solid var(--line); background:transparent;
+    color:var(--steel); cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:border-color .3s, color .3s, box-shadow .3s; font-size:0.95rem;
+  }
+  .sound-toggle:hover{border-color:var(--gold); color:var(--gold);}
+  .sound-toggle.on{color:var(--gold); border-color:var(--gold); box-shadow:0 0 14px rgba(205,164,76,0.35);}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:0 6vw;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(21,42,82,0.9), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 85% 90%, rgba(154,75,58,0.25), transparent 60%),
+      linear-gradient(180deg, var(--ink) 0%, #0a0e18 100%);
+    overflow:hidden;
+  }
+  .speedlines{position:absolute; inset:0; z-index:0; opacity:0.35;}
+  .speedlines div{
+    position:absolute; height:1px; width:140%; left:-20%;
+    background:linear-gradient(90deg, transparent, var(--steel), transparent);
+    animation:zoom linear infinite;
+  }
+  @keyframes zoom{
+    from{transform:translateX(-30%) scaleX(0.6); opacity:0;}
+    50%{opacity:0.8;}
+    to{transform:translateX(10%) scaleX(1.3); opacity:0;}
+  }
+
+  .eyebrow{
+    font-family:'Space Mono', monospace; font-size:0.75rem; color:var(--gold);
+    letter-spacing:2px; margin-bottom:22px; position:relative; z-index:2;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .pulse{width:6px; height:6px; border-radius:50%; background:var(--gold); animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1; box-shadow:0 0 0 0 rgba(205,164,76,0.6);} 50%{opacity:0.5; box-shadow:0 0 0 8px rgba(205,164,76,0);}}
+
+  .hero h1{
+    position:relative; z-index:2;
+    font-size:clamp(3.2rem, 11vw, 8.5rem); line-height:0.95; font-weight:400;
+    background:linear-gradient(180deg, var(--chrome) 20%, var(--steel) 60%, rgba(170,180,196,0.4));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    transition:transform .3s ease-out;
+  }
+  .hero h1 em{font-style:italic; color:var(--gold); -webkit-text-fill-color:var(--gold);}
+  .hero .sub{
+    position:relative; z-index:2; margin-top:22px; max-width:560px;
+    color:var(--steel); font-size:1.05rem; line-height:1.6;
+  }
+
+  .stat-strip{
+    position:relative; z-index:2; display:flex; gap:50px; margin-top:56px; flex-wrap:wrap; justify-content:center;
+  }
+  .stat{text-align:center;}
+  .stat .num{font-family:'Space Mono', monospace; font-size:2.4rem; color:var(--gold);}
+  .stat .lbl{font-size:0.72rem; color:var(--steel); letter-spacing:1px; margin-top:6px;}
+
+  .ignition-block{
+    position:relative; z-index:2; margin-top:54px; display:flex; align-items:center; gap:30px; flex-wrap:wrap; justify-content:center;
+  }
+  .ignition-btn{
+    position:relative; width:64px; height:64px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #1c2740, #07080c);
+    border:1px solid rgba(231,235,242,0.25); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; color:var(--gold);
+    transition:box-shadow .3s ease, border-color .3s ease; font-size:1.4rem;
+  }
+  .ignition-btn .ring{position:absolute; inset:-6px; border-radius:50%; border:1px solid var(--gold); opacity:0.4; animation:ringpulse 2.4s ease-in-out infinite;}
+  @keyframes ringpulse{0%,100%{transform:scale(1); opacity:0.35;} 50%{transform:scale(1.12); opacity:0.75;}}
+  .ignition-btn.running{box-shadow:0 0 30px rgba(205,164,76,0.55); border-color:var(--gold);}
+  .ignition-label{position:absolute; bottom:-26px; left:50%; transform:translateX(-50%); font-family:'Space Mono',monospace; font-size:0.64rem; letter-spacing:1px; color:var(--steel); white-space:nowrap;}
+  .tacho{display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .tacho-lbl{font-size:0.6rem; color:var(--steel); letter-spacing:1px;}
+
+  .scroll-cue{
+    position:absolute; bottom:34px; left:50%; transform:translateX(-50%);
+    font-family:'Space Mono', monospace; font-size:0.7rem; color:var(--steel);
+    display:flex; flex-direction:column; align-items:center; gap:8px; opacity:0.7; z-index:2;
+  }
+  .scroll-cue .line{width:1px; height:36px; background:linear-gradient(var(--steel), transparent); animation:down 1.6s ease-in-out infinite;}
+  @keyframes down{0%{transform:scaleY(0); transform-origin:top;} 50%{transform:scaleY(1); transform-origin:top;} 51%{transform-origin:bottom;} 100%{transform:scaleY(0); transform-origin:bottom;}}
+
+  body.engine-pulse{animation:enginepulse 0.6s ease;}
+  @keyframes enginepulse{
+    0%{filter:brightness(1);}
+    30%{filter:brightness(1.28);}
+    100%{filter:brightness(1);}
+  }
+
+  /* ---------- SECTION GENERIC ---------- */
+  section{position:relative; padding:130px 8vw;}
+  .section-head{max-width:640px; margin-bottom:70px;}
+  .section-head .tag{font-family:'Space Mono', monospace; font-size:0.75rem; color:var(--gold); letter-spacing:2px;}
+  .section-head h2{font-size:clamp(2rem,4.2vw,3.4rem); font-weight:400; margin-top:14px;}
+  .section-head h2 em{font-style:italic; color:var(--gold);}
+  .section-head p{color:var(--steel); margin-top:16px; line-height:1.6;}
+
+  /* ---------- NUMBERS ---------- */
+  .numbers{background:linear-gradient(180deg, #0a0e18, var(--navy) 120%);}
+  .num-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line);}
+  .num-card{
+    background:#0a0e18; padding:44px 28px; position:relative; overflow:hidden;
+    transition:background .4s ease;
+  }
+  .num-card:hover{background:#0d1424;}
+  .num-card::before{
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:var(--accent, var(--gold)); transform:scaleX(0); transform-origin:left;
+    transition:transform .5s ease;
+  }
+  .num-card:hover::before{transform:scaleX(1);}
+  .num-card .big{font-family:'Space Mono', monospace; font-size:clamp(2rem,3.4vw,3rem); color:var(--chrome);}
+  .num-card .unit{font-size:0.9rem; color:var(--accent, var(--gold)); margin-left:4px;}
+  .num-card .desc{margin-top:14px; font-size:0.85rem; color:var(--steel); line-height:1.5;}
+
+  /* ---------- TIMELINE ---------- */
+  .timeline{background:var(--ink);}
+  .tl-track{position:relative; max-width:760px; margin:0 auto; padding-left:36px; border-left:1px solid var(--line);}
+  .tl-item{position:relative; padding-bottom:60px;}
+  .tl-item:last-child{padding-bottom:0;}
+  .tl-item::before{
+    content:''; position:absolute; left:-42px; top:4px; width:12px; height:12px; border-radius:50%;
+    background:var(--ink); border:2px solid var(--gold);
+  }
+  .tl-item .yr{font-family:'Space Mono', monospace; color:var(--gold); font-size:0.85rem;}
+  .tl-item h3{font-size:1.4rem; font-weight:400; margin-top:8px; font-family:'Fraunces', serif;}
+  .tl-item p{color:var(--steel); margin-top:10px; line-height:1.6; max-width:520px;}
+
+  /* ---------- ENGINE ---------- */
+  .engine{
+    background:radial-gradient(ellipse 70% 60% at 30% 30%, rgba(21,42,82,0.7), transparent 65%), var(--navy);
+    display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center;
+  }
+  .engine-visual{position:relative; display:flex; align-items:center; justify-content:center;}
+  .engine-visual svg{width:100%; max-width:420px;}
+  .cyl{animation:glow 3.2s ease-in-out infinite;}
+  @keyframes glow{0%,100%{opacity:0.55;} 50%{opacity:1;}}
+  .turbo-ring{animation:spin 4s linear infinite; transform-origin:center;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .engine-list{list-style:none;}
+  .engine-list li{
+    display:flex; justify-content:space-between; padding:18px 0; border-bottom:1px solid var(--line);
+    font-size:0.95rem;
+  }
+  .engine-list li span:first-child{color:var(--steel);}
+  .engine-list li span:last-child{font-family:'Space Mono', monospace; color:var(--gold);}
+
+  /* ---------- VARIANTS ---------- */
+  .variants{background:var(--ink);}
+  .var-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:26px;}
+  .var-card{
+    border:1px solid var(--line); padding:34px 28px; position:relative;
+    transition:transform .45s ease, border-color .45s ease;
+    overflow:hidden;
+  }
+  .var-card:hover{transform:translateY(-8px); border-color:var(--gold);}
+  .var-card .glare{
+    position:absolute; inset:-40%; background:radial-gradient(circle, rgba(205,164,76,0.12), transparent 60%);
+    opacity:0; transition:opacity .4s ease;
+  }
+  .var-card:hover .glare{opacity:1;}
+  .var-card h4{font-family:'Fraunces', serif; font-size:1.4rem; font-weight:400; position:relative; z-index:1;}
+  .var-card .top{font-family:'Space Mono', monospace; color:var(--gold); font-size:1.6rem; margin-top:18px; position:relative; z-index:1;}
+  .var-card .top span{font-size:0.75rem; color:var(--steel); margin-left:6px;}
+  .var-card p{margin-top:14px; color:var(--steel); font-size:0.88rem; line-height:1.55; position:relative; z-index:1;}
+
+  /* ---------- CLOSING ---------- */
+  .closing{
+    text-align:center; padding:160px 8vw;
+    background:linear-gradient(180deg, var(--navy), var(--ink));
+  }
+  .closing h2{font-size:clamp(2.2rem,5vw,4rem); font-weight:400;}
+  .closing h2 em{font-style:italic; color:var(--gold);}
+  .closing p{margin-top:20px; color:var(--steel); max-width:520px; margin-inline:auto;}
+
+  footer{
+    padding:40px 8vw; display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+    border-top:1px solid var(--line); font-size:0.78rem; color:#5c657c;
+    font-family:'Space Mono', monospace;
+  }
+
+  @media(max-width:860px){
+    .num-grid{grid-template-columns:repeat(2,1fr);}
+    .engine{grid-template-columns:1fr;}
+    .var-grid{grid-template-columns:1fr;}
+    .stat-strip{gap:30px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<nav>
+  <div class="brand">Veyron<span>.</span>16.4</div>
+  <div class="navlinks">
+    <a href="#numbers">Числа</a>
+    <a href="#history">История</a>
+    <a href="#engine">Двигатель</a>
+    <a href="#variants">Версии</a>
+    <button class="sound-toggle" id="soundToggle" title="Включить звук">♪̸</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="speedlines" id="speedlines"></div>
+  <div class="eyebrow"><span class="pulse"></span> ПЕРВЫЙ СЕРИЙНЫЙ АВТОМОБИЛЬ С 1000+ Л.С.</div>
+  <h1 class="serif" id="heroTitle">Bugatti<br><em>Veyron 16.4</em></h1>
+  <p class="sub">В 2005 году Bugatti стёрла границу между суперкаром и произведением инженерного искусства — восьмилитровый W16 с четырьмя турбинами и планка, которую больше десяти лет никто не мог превзойти.</p>
+
+  <div class="stat-strip">
+    <div class="stat"><div class="num" data-count="1001">0</div><div class="lbl">Л.С. / PS</div></div>
+    <div class="stat"><div class="num" data-count="253">0</div><div class="lbl">MPH ТОП-СКОРОСТЬ</div></div>
+    <div class="stat"><div class="num" data-count="16" data-decimals="0">0</div><div class="lbl">ЦИЛИНДРОВ, W16</div></div>
+    <div class="stat"><div class="num" data-count="2.5" data-decimals="1">0</div><div class="lbl">СЕК ДО 100 КМ/Ч</div></div>
+  </div>
+
+  <div class="ignition-block">
+    <button class="ignition-btn" id="ignitionBtn">
+      <span class="ring"></span>⏻
+      <span class="ignition-label" id="ignitionLabel">ЗАПУСК ДВИГАТЕЛЯ</span>
+    </button>
+    <div class="tacho">
+      <svg viewBox="0 0 120 70" width="120" height="70">
+        <path d="M10,65 A50,50 0 0 1 110,65" fill="none" stroke="#2a3a5c" stroke-width="6"/>
+        <path d="M10,65 A50,50 0 0 1 110,65" fill="none" stroke="#cda44c" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="220" id="tachArc"/>
+        <line x1="60" y1="65" x2="60" y2="20" stroke="#e7ebf2" stroke-width="2" id="tachNeedle" style="transform-origin:60px 65px; transform:rotate(-90deg); transition: transform 0.12s ease;"/>
+        <circle cx="60" cy="65" r="4" fill="#cda44c"/>
+      </svg>
+      <div class="tacho-lbl mono">RPM ×1000</div>
+    </div>
+  </div>
+
+  <div class="scroll-cue">SCROLL<div class="line"></div></div>
+</section>
+
+<!-- NUMBERS -->
+<section class="numbers" id="numbers">
+  <div class="section-head reveal">
+    <div class="tag">002 / ХАРАКТЕРИСТИКИ</div>
+    <h2 class="serif">Цифры, которые <em>переписали правила.</em></h2>
+    <p>До Veyron суперкары соревновались в управляемости и разгоне. После — весь класс стал считать лошадиные силы и мили в час.</p>
+  </div>
+  <div class="num-grid">
+    <div class="num-card reveal" style="--accent:#cda44c">
+      <div><span class="big">987</span><span class="unit">HP</span></div>
+      <div class="desc">Официальная мощность W16 по данным Volkswagen Group — 736 кВт, 1001 метрическая л.с.</div>
+    </div>
+    <div class="num-card reveal" style="--accent:#9a4b3a">
+      <div><span class="big">1250</span><span class="unit">Н·м</span></div>
+      <div class="desc">Крутящий момент на 2200 об/мин — тяга, сопоставимая с показателями лёгкого истребителя по весу.</div>
+    </div>
+    <div class="num-card reveal" style="--accent:#7d93c2">
+      <div><span class="big">253.81</span><span class="unit">MPH</span></div>
+      <div class="desc">Средняя скорость, зафиксированная немецкими инспекторами на закрытых испытаниях — первой в истории серийной машины.</div>
+    </div>
+    <div class="num-card reveal" style="--accent:#cda44c">
+      <div><span class="big">2.46</span><span class="unit">СЕК</span></div>
+      <div class="desc">Разгон 0–60 миль/ч (0–97 км/ч) — быстрее, чем большинство современных ему гоночных прототипов.</div>
+    </div>
+  </div>
+</section>
+
+<!-- HISTORY -->
+<section class="timeline" id="history">
+  <div class="section-head reveal">
+    <div class="tag">003 / ХРОНОЛОГИЯ</div>
+    <h2 class="serif">От наброска на салфетке <em>до рекорда.</em></h2>
+  </div>
+  <div class="tl-track">
+    <div class="tl-item reveal">
+      <div class="yr mono">1997</div>
+      <h3>Эскиз в поезде</h3>
+      <p>Фердинанд Пиех, глава Volkswagen Group, набросал на конверте концепцию 18-цилиндрового двигателя, едучи на Синкансэне из Токио в Нагою — так родилась идея будущего Veyron.</p>
+    </div>
+    <div class="tl-item reveal">
+      <div class="yr mono">1998</div>
+      <h3>Volkswagen приобретает Bugatti</h3>
+      <p>Бренд возрождают с амбициозной целью Пиеха: построить самый быстрый, мощный и при этом пригодный для повседневной езды серийный автомобиль в истории.</p>
+    </div>
+    <div class="tl-item reveal">
+      <div class="yr mono">2005</div>
+      <h3>Старт производства</h3>
+      <p>Veyron 16.4 выходит на рынок с мощностью 1001 метрическая л.с. и становится первым серийным автомобилем, превысившим одновременно порог в 1000 л.с. и 250 миль/ч.</p>
+    </div>
+    <div class="tl-item reveal">
+      <div class="yr mono">2010</div>
+      <h3>Super Sport</h3>
+      <p>Версия Super Sport поднимает мощность до 1200 л.с. и устанавливает рекорд скорости среди серийных суперкаров того времени — 257 миль/ч.</p>
+    </div>
+    <div class="tl-item reveal">
+      <div class="yr mono">2015</div>
+      <h3>Конец производства, начало эпохи</h3>
+      <p>Выпущено порядка 450 машин. Veyron завершает цикл, но именно с него начинается современная гонка гиперкаров за скорость и мощность.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ENGINE -->
+<section class="engine" id="engine">
+  <div class="engine-visual reveal">
+    <svg class="w16" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="200" cy="200" r="150" stroke="#2a3a5c" stroke-width="1" opacity="0.5"/>
+      <circle class="turbo-ring" cx="200" cy="200" r="120" stroke="#cda44c" stroke-width="1" stroke-dasharray="6 10" opacity="0.6"/>
+      <g id="cyls"></g>
+      <circle cx="200" cy="200" r="46" fill="#0c1730" stroke="#cda44c" stroke-width="1.5"/>
+      <text x="200" y="196" text-anchor="middle" fill="#e7ebf2" font-family="Space Mono" font-size="15">W16</text>
+      <text x="200" y="214" text-anchor="middle" fill="#9aa6bd" font-family="Space Mono" font-size="9">QUAD-TURBO</text>
+    </svg>
+  </div>
+  <div>
+    <div class="section-head reveal" style="margin-bottom:36px;">
+      <div class="tag">004 / АНАТОМИЯ</div>
+      <h2 class="serif">Сердце из <em>восьми литров.</em></h2>
+      <p>Компоновка W16 — фактически два V8, соединённых под общим углом — питается четырьмя турбокомпрессорами и требует десяти радиаторов для охлаждения всей системы.</p>
+    </div>
+    <ul class="engine-list reveal">
+      <li><span>Объём двигателя</span><span>7 993 см³</span></li>
+      <li><span>Конфигурация</span><span>W16, 4×турбо</span></li>
+      <li><span>Клапаны</span><span>64 (4 на цилиндр)</span></li>
+      <li><span>Коробка передач</span><span>7-ст. DSG</span></li>
+      <li><span>Снаряжённая масса</span><span>1 888 кг</span></li>
+      <li><span>Удельная мощность</span><span>4.21 фунт/л.с.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- VARIANTS -->
+<section class="variants" id="variants">
+  <div class="section-head reveal">
+    <div class="tag">005 / ВЕРСИИ</div>
+    <h2 class="serif">Три главы <em>одной легенды.</em></h2>
+  </div>
+  <div class="var-grid">
+    <div class="var-card reveal">
+      <div class="glare"></div>
+      <h4>16.4</h4>
+      <div class="top">253<span>MPH</span></div>
+      <p>Оригинальная версия 2005 года — та самая, что первой в мире преодолела рубеж в 1000 л.с. и 250 миль/ч одновременно.</p>
+    </div>
+    <div class="var-card reveal">
+      <div class="glare"></div>
+      <h4>Grand Sport</h4>
+      <div class="top">253<span>MPH</span></div>
+      <p>Родстер-версия со съёмной крышей-таргой — та же мощь, но с открытым небом над головой.</p>
+    </div>
+    <div class="var-card reveal">
+      <div class="glare"></div>
+      <h4>Super Sport</h4>
+      <div class="top">257<span>MPH</span></div>
+      <p>Форсированная до 1200 л.с. версия, установившая рекорд скорости среди серийных суперкаров своего времени.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CLOSING -->
+<section class="closing reveal">
+  <h2 class="serif">Не сравнимый ни с чем — <em>по определению Этторе Бугатти.</em></h2>
+  <p>«Если это можно сравнить — это не Bugatti». Veyron не просто выиграл гонку за скорость: он задал вопрос, на который вся индустрия гиперкаров отвечает до сих пор.</p>
+</section>
+
+<footer>
+  <span>VEYRON 16.4 — ANATOMY OF A RECORD</span>
+  <span>2005 — 2015 · ~450 ЕДИНИЦ ВЫПУЩЕНО</span>
+</footer>
+
+<script>
+  // ---- decorative speed lines ----
+  const sl = document.getElementById('speedlines');
+  for(let i=0;i<14;i++){
+    const d = document.createElement('div');
+    d.style.top = (Math.random()*100)+'%';
+    d.style.animationDuration = (2.5 + Math.random()*3)+'s';
+    d.style.animationDelay = (Math.random()*4)+'s';
+    sl.appendChild(d);
+  }
+
+  // ---- radial cylinder marks for engine SVG ----
+  const cylsGroup = document.getElementById('cyls');
+  const cylCount = 16;
+  for(let i=0;i<cylCount;i++){
+    const angle = (i/cylCount) * Math.PI*2;
+    const r1=70, r2=95;
+    const x1 = 200 + r1*Math.cos(angle);
+    const y1 = 200 + r1*Math.sin(angle);
+    const x2 = 200 + r2*Math.cos(angle);
+    const y2 = 200 + r2*Math.sin(angle);
+    const line = document.createElementNS("http://www.w3.org/2000/svg","line");
+    line.setAttribute("x1",x1); line.setAttribute("y1",y1);
+    line.setAttribute("x2",x2); line.setAttribute("y2",y2);
+    line.setAttribute("stroke", i%2===0 ? "#cda44c" : "#7d93c2");
+    line.setAttribute("stroke-width","4");
+    line.setAttribute("stroke-linecap","round");
+    line.classList.add("cyl");
+    line.style.animationDelay = (i*0.12)+"s";
+    cylsGroup.appendChild(line);
+  }
+
+  // ---- scroll reveal ----
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  }, {threshold:0.15});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  // ---- parallax on hero title ----
+  const heroEl = document.querySelector('.hero');
+  const heroH1 = document.getElementById('heroTitle');
+  heroEl.addEventListener('mousemove', (e)=>{
+    const {innerWidth:w, innerHeight:h} = window;
+    const x = (e.clientX/w - 0.5) * 16;
+    const y = (e.clientY/h - 0.5) * 10;
+    heroH1.style.transform = `translate(${x}px, ${y}px)`;
+  });
+  heroEl.addEventListener('mouseleave', ()=>{ heroH1.style.transform='translate(0,0)'; });
+
+  // =========================================================
+  // AUDIO: all sounds are synthesized in-browser (Web Audio),
+  // no external audio files are used.
+  // =========================================================
+  let audioCtx=null, soundOn=false, engineRunning=false;
+  let idleOsc1,idleOsc2,idleGain,idleLFO;
+  let tachRAF=null;
+
+  function ensureAudio(){
+    if(!audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+    if(audioCtx.state==='suspended') audioCtx.resume();
+  }
+
+  function setTach(fraction){
+    fraction = Math.max(0, Math.min(1, fraction));
+    const needle = document.getElementById('tachNeedle');
+    const arc = document.getElementById('tachArc');
+    const angle = -90 + fraction*180;
+    needle.style.transform = `rotate(${angle}deg)`;
+    const arcLen = 220;
+    arc.style.strokeDashoffset = arcLen - (arcLen*fraction);
+  }
+
+  function pulseScreen(){
+    document.body.classList.remove('engine-pulse');
+    void document.body.offsetWidth;
+    document.body.classList.add('engine-pulse');
+  }
+
+  function playBlip(freq){
+    if(!soundOn) return;
+    ensureAudio();
+    const ctx=audioCtx, now=ctx.currentTime;
+    const osc=ctx.createOscillator(); osc.type='sine'; osc.frequency.setValueAtTime(freq, now);
+    const gain=ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.1, now+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now+0.16);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now); osc.stop(now+0.18);
+  }
+
+  function playWhoosh(duration){
+    if(!soundOn) return;
+    ensureAudio();
+    const ctx=audioCtx, now=ctx.currentTime;
+    const bufferSize=Math.floor(ctx.sampleRate*duration);
+    const buffer=ctx.createBuffer(1,bufferSize,ctx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++) data[i]=Math.random()*2-1;
+    const noise=ctx.createBufferSource(); noise.buffer=buffer;
+    const filter=ctx.createBiquadFilter(); filter.type='bandpass'; filter.Q.value=0.7;
+    filter.frequency.setValueAtTime(150, now);
+    filter.frequency.linearRampToValueAtTime(2600, now+duration*0.55);
+    filter.frequency.linearRampToValueAtTime(400, now+duration);
+    const gain=ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.16, now+duration*0.3);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now+duration);
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start(now); noise.stop(now+duration);
+  }
+
+  function idleWobble(){
+    function loop(t){
+      if(!engineRunning) return;
+      const wob = 0.15 + Math.sin(t/300)*0.02;
+      setTach(wob);
+      tachRAF=requestAnimationFrame(loop);
+    }
+    tachRAF=requestAnimationFrame(loop);
+  }
+
+  function startEngine(){
+    ensureAudio();
+    const ctx=audioCtx, now=ctx.currentTime;
+    engineRunning=true;
+    document.getElementById('ignitionBtn').classList.add('running');
+    document.getElementById('ignitionLabel').textContent='ОСТАНОВИТЬ ДВИГАТЕЛЬ';
+
+    if(soundOn){
+      const bufferSize=ctx.sampleRate*0.35;
+      const buffer=ctx.createBuffer(1,bufferSize,ctx.sampleRate);
+      const data=buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++) data[i]=(Math.random()*2-1)*(1-i/bufferSize);
+      const noise=ctx.createBufferSource(); noise.buffer=buffer;
+      const nf=ctx.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=280;
+      const ng=ctx.createGain(); ng.gain.setValueAtTime(0.45, now); ng.gain.exponentialRampToValueAtTime(0.001, now+0.35);
+      noise.connect(nf).connect(ng).connect(ctx.destination);
+      noise.start(now); noise.stop(now+0.35);
+
+      const revStart = now+0.3;
+      const o1=ctx.createOscillator(); o1.type='sawtooth';
+      const o2=ctx.createOscillator(); o2.type='sawtooth'; o2.detune.value=10;
+      const gain=ctx.createGain(); gain.gain.setValueAtTime(0.0001, revStart);
+      const filt=ctx.createBiquadFilter(); filt.type='lowpass';
+      filt.frequency.setValueAtTime(500, revStart);
+      filt.frequency.linearRampToValueAtTime(2400, revStart+0.8);
+      filt.frequency.linearRampToValueAtTime(900, revStart+1.8);
+
+      o1.frequency.setValueAtTime(45, revStart);
+      o1.frequency.linearRampToValueAtTime(170, revStart+0.8);
+      o1.frequency.linearRampToValueAtTime(60, revStart+1.8);
+      o2.frequency.setValueAtTime(46, revStart);
+      o2.frequency.linearRampToValueAtTime(171, revStart+0.8);
+      o2.frequency.linearRampToValueAtTime(61, revStart+1.8);
+
+      gain.gain.linearRampToValueAtTime(0.26, revStart+0.15);
+      gain.gain.setValueAtTime(0.26, revStart+0.8);
+      gain.gain.exponentialRampToValueAtTime(0.05, revStart+1.8);
+
+      o1.connect(filt); o2.connect(filt); filt.connect(gain).connect(ctx.destination);
+      o1.start(revStart); o2.start(revStart);
+      o1.stop(revStart+1.85); o2.stop(revStart+1.85);
+
+      idleOsc1=ctx.createOscillator(); idleOsc1.type='sawtooth'; idleOsc1.frequency.value=58;
+      idleOsc2=ctx.createOscillator(); idleOsc2.type='sawtooth'; idleOsc2.frequency.value=59;
+      idleGain=ctx.createGain(); idleGain.gain.setValueAtTime(0.0001, revStart+1.7);
+      idleGain.gain.linearRampToValueAtTime(0.07, revStart+2.0);
+      const idleFilt=ctx.createBiquadFilter(); idleFilt.type='lowpass'; idleFilt.frequency.value=500;
+
+      idleLFO=ctx.createOscillator(); idleLFO.type='sine'; idleLFO.frequency.value=6;
+      const idleLFOGain=ctx.createGain(); idleLFOGain.gain.value=3;
+      idleLFO.connect(idleLFOGain).connect(idleOsc1.frequency);
+
+      idleOsc1.connect(idleFilt); idleOsc2.connect(idleFilt);
+      idleFilt.connect(idleGain).connect(ctx.destination);
+      idleOsc1.start(revStart+1.7); idleOsc2.start(revStart+1.7); idleLFO.start(revStart+1.7);
+    }
+
+    const t0=performance.now();
+    const totalDur = soundOn ? 2600 : 1400;
+    function tick(now){
+      const t=(now-t0)/totalDur;
+      if(t<1){
+        let frac;
+        if(t<0.35) frac = (t/0.35)*0.95;
+        else if(t<0.7) frac = 0.95 - ((t-0.35)/0.35)*0.75;
+        else frac = 0.2 - ((t-0.7)/0.3)*0.05;
+        setTach(Math.max(frac,0));
+        tachRAF=requestAnimationFrame(tick);
+      } else {
+        idleWobble();
+      }
+    }
+    pulseScreen();
+    tachRAF=requestAnimationFrame(tick);
+  }
+
+  function stopEngine(){
+    engineRunning=false;
+    if(tachRAF) cancelAnimationFrame(tachRAF);
+    setTach(0);
+    document.getElementById('ignitionBtn').classList.remove('running');
+    document.getElementById('ignitionLabel').textContent='ЗАПУСК ДВИГАТЕЛЯ';
+    if(audioCtx && idleGain){
+      const now=audioCtx.currentTime;
+      idleGain.gain.cancelScheduledValues(now);
+      idleGain.gain.setValueAtTime(idleGain.gain.value, now);
+      idleGain.gain.exponentialRampToValueAtTime(0.0001, now+0.3);
+      idleOsc1.stop(now+0.35); idleOsc2.stop(now+0.35); idleLFO.stop(now+0.35);
+    }
+  }
+
+  document.getElementById('ignitionBtn').addEventListener('click', ()=>{
+    ensureAudio();
+    if(!engineRunning) startEngine(); else stopEngine();
+  });
+
+  const soundToggle=document.getElementById('soundToggle');
+  soundToggle.addEventListener('click', ()=>{
+    soundOn=!soundOn;
+    ensureAudio();
+    soundToggle.classList.toggle('on', soundOn);
+    soundToggle.textContent = soundOn ? '♪' : '♪̸';
+    if(soundOn) playBlip(700);
+  });
+
+  document.querySelectorAll('.num-card, .var-card').forEach((el,i)=>{
+    el.addEventListener('mouseenter', ()=>playBlip(500+i*40));
+  });
+
+  // ---- animated counters (with a synced whoosh) ----
+  let whooshPlayed=false;
+  const counters = document.querySelectorAll('.num[data-count]');
+  const cio = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        if(!whooshPlayed){ playWhoosh(1.3); whooshPlayed=true; }
+        const el = e.target;
+        const target = parseFloat(el.dataset.count);
+        const decimals = parseInt(el.dataset.decimals || "0");
+        let cur = 0;
+        const duration = 1400;
+        const start = performance.now();
+        function tick(now){
+          const p = Math.min((now-start)/duration, 1);
+          const eased = 1 - Math.pow(1-p, 3);
+          cur = target*eased;
+          el.textContent = decimals>0 ? cur.toFixed(decimals) : Math.round(cur);
+          if(p<1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+        cio.unobserve(el);
+      }
+    });
+  }, {threshold:0.5});
+  counters.forEach(c=>cio.observe(c));
+</script>
+
+</body>
+</html>
